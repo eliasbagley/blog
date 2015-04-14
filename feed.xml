@@ -6,8 +6,8 @@
 </description>
     <link>http://yourdomain.com/blog/</link>
     <atom:link href="http://yourdomain.com/blog/feed.xml" rel="self" type="application/rss+xml"/>
-    <pubDate>Tue, 14 Apr 2015 11:09:27 -0600</pubDate>
-    <lastBuildDate>Tue, 14 Apr 2015 11:09:27 -0600</lastBuildDate>
+    <pubDate>Tue, 14 Apr 2015 11:19:13 -0600</pubDate>
+    <lastBuildDate>Tue, 14 Apr 2015 11:19:13 -0600</lastBuildDate>
     <generator>Jekyll v2.5.3</generator>
     
       <item>
@@ -22,9 +22,12 @@
       </item>
     
       <item>
-        <title>Minimal as Fuck</title>
-        <description>&lt;p&gt;This is my first blog post. It is a lesson on minimalism.
-&lt;img src=&quot;http://yourdomain.com/assets/cat.jpg&quot; alt=&quot;Cat picture&quot; /&gt;&lt;/p&gt;
+        <title>Cat Burritos</title>
+        <description>&lt;p&gt;This is my first blog post. It is a lesson on minimalism. /blog&lt;/p&gt;
+
+&lt;p&gt;This is a cat burrito. Cat burritos are delicious and nutritous.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/blog/assets/cat.jpg&quot; alt=&quot;Cat picture&quot; /&gt;&lt;/p&gt;
 </description>
         <pubDate>Fri, 10 Apr 2015 17:22:15 -0600</pubDate>
         <link>http://yourdomain.com/blog/test/2015/04/10/minimal-as-fuck.html</link>
