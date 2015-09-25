@@ -96,12 +96,13 @@
 <div class="highlight"><pre><code class="language-swift" data-lang="swift"><span class="k">import</span> <span class="n">Foundation</span>
 
 <span class="k">class</span> <span class="n">Article</span> <span class="p">{</span>
-  <span class="k">var</span> <span class="kt">id</span><span class="o">:</span> <span class="n">Int</span>
-  <span class="k">var</span> <span class="nl">title</span><span class="p">:</span> <span class="n">String</span>
-  <span class="k">var</span> <span class="nl">body</span><span class="p">:</span> <span class="n">String</span>
+  <span class="k">var</span> <span class="kt">id</span><span class="o">:</span> <span class="n">Int</span><span class="o">?</span>
+  <span class="k">var</span> <span class="nl">title</span><span class="p">:</span> <span class="n">String</span><span class="o">?</span>
+  <span class="k">var</span> <span class="nl">body</span><span class="p">:</span> <span class="n">String</span><span class="o">?</span>
+
 
   <span class="k">init</span><span class="p">(</span><span class="nl">json</span><span class="p">:</span> <span class="n">JSONDictionary</span><span class="p">)</span> <span class="p">{</span>
-    <span class="n">populateWithJSON</span><span class="p">(</span><span class="nl">dictionary</span><span class="p">:</span> <span class="n">json</span><span class="p">)</span>
+    <span class="n">populateWithJSON</span><span class="p">(</span><span class="n">json</span><span class="p">)</span>
   <span class="p">}</span>
 
   <span class="k">func</span> <span class="n">populateWithJSON</span><span class="p">(</span><span class="nl">dictionary</span><span class="p">:</span> <span class="n">JSONDictionary</span><span class="p">)</span> <span class="p">{</span>
@@ -115,6 +116,16 @@
       <span class="nb">self</span><span class="p">.</span><span class="n">body</span> <span class="o">=</span> <span class="n">body</span>
     <span class="p">}</span>
   <span class="p">}</span>
+
+  <span class="k">func</span> <span class="n">toJsonDictionary</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">JSONDictionary</span> <span class="p">{</span>
+    <span class="k">var</span> <span class="nl">dict</span><span class="p">:</span> <span class="n">JSONDictionary</span> <span class="o">=</span> <span class="p">[</span><span class="o">:</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="k">let</span> <span class="kt">id</span> <span class="o">=</span> <span class="kt">id</span> <span class="p">{</span> <span class="n">dict</span><span class="p">[</span><span class="s">&quot;id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kt">id</span> <span class="p">}</span>
+    <span class="k">if</span> <span class="k">let</span> <span class="n">title</span> <span class="o">=</span> <span class="n">title</span> <span class="p">{</span> <span class="n">dict</span><span class="p">[</span><span class="s">&quot;title&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">title</span> <span class="p">}</span>
+    <span class="k">if</span> <span class="k">let</span> <span class="n">body</span> <span class="o">=</span> <span class="n">body</span> <span class="p">{</span> <span class="n">dict</span><span class="p">[</span><span class="s">&quot;body&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">body</span> <span class="p">}</span>
+
+    <span class="k">return</span> <span class="n">dict</span>
+  <span class="p">}</span>
 <span class="p">}</span></code></pre></div>
 
 <p>I use this approach for JSON parsing over something nicer like ObjectMapper, because it allows more flexibility in the way objects are initialized. For example, when we switch to use core data, we don’t have the ability to init() our objects ourselves - core data does that for us, therefore we need a way to populate objects that have already been initialized. Hence, populateWithJson</p>
@@ -124,6 +135,7 @@
 <div class="highlight"><pre><code class="language-swift" data-lang="swift"><span class="k">import</span> <span class="n">Foundation</span>
 <span class="k">import</span> <span class="n">Alamofire</span>
 
+<span class="n">public</span> <span class="k">typealias</span> <span class="n">JSONDictionary</span> <span class="o">=</span> <span class="p">[</span><span class="nl">String</span><span class="p">:</span> <span class="n">AnyObject</span><span class="p">]</span>
 <span class="k">typealias</span> <span class="n">APIParams</span> <span class="o">=</span> <span class="p">[</span><span class="nl">String</span> <span class="p">:</span> <span class="n">AnyObject</span><span class="p">]</span><span class="o">?</span>
 
 <span class="k">protocol</span> <span class="n">APIConfiguration</span> <span class="p">{</span>
