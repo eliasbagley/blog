@@ -6,8 +6,8 @@
 </description>
     <link>http://yourdomain.com/blog/</link>
     <atom:link href="http://yourdomain.com/blog/feed.xml" rel="self" type="application/rss+xml"/>
-    <pubDate>Fri, 25 Sep 2015 19:15:47 +0700</pubDate>
-    <lastBuildDate>Fri, 25 Sep 2015 19:15:47 +0700</lastBuildDate>
+    <pubDate>Fri, 25 Sep 2015 23:02:43 +0700</pubDate>
+    <lastBuildDate>Fri, 25 Sep 2015 23:02:43 +0700</lastBuildDate>
     <generator>Jekyll v2.5.3</generator>
     
       <item>
@@ -283,7 +283,7 @@
 
 &lt;p&gt;Now we have the ability to make a request to a web server and receive a list of objects back, as a list of &lt;code&gt;Article&lt;/code&gt; objects that can be used in our app. The only difficulty with the current appraoch is that we have to keep a local copy of &lt;code&gt;Article&lt;/code&gt; objects inside of the view controller, in order to present them in the UI of our app. This means that we need to cate care of all the data binding and syncing manually, which can be a pain. For example, if the user edits an object in a detail page, those changes will need to be sent back to the list in order to keep the list of data and detail view controller for that object in sync. We can prevent the need to have a local copy of the &lt;code&gt;Article&lt;/code&gt; list in the view controller by first putting the &lt;code&gt;Articles&lt;/code&gt; into Core Data, and using an &lt;code&gt;NSFetchedResultsController&lt;/code&gt; to bind the data in core data to the UI. Stay tuned for the next article.&lt;/p&gt;
 
-&lt;p&gt;An executable is worth a thousand words, so you can find a working example of the code on &lt;a href=&quot;https://github.com/eliasbagley/alamofire-example-1&quot;&gt;Github&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;An executable is worth a thousand words, so you can find a working example of the code on &lt;a href=&quot;https://github.com/eliasbagley/alamofire-example-1&quot;&gt;Github&lt;/a&gt;. The device will host a local test server so you can make network requests to a mocked Artilce API.&lt;/p&gt;
 
 </description>
         <pubDate>Sun, 30 Aug 2015 06:22:15 +0700</pubDate>
