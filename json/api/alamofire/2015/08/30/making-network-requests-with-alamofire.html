@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Making Network Requests with Alamofire</title>
+  <meta name="description" content="Almost every iOS app needs to interact with a remote API in some form or another. In this post I want to detail how I set up my networking layer using Alamof...">
+
+  <link rel="stylesheet" href="/blog/css/main.css">
+  <link rel="canonical" href="http://yourdomain.com/blog/json/api/alamofire/2015/08/30/making-network-requests-with-alamofire.html">
+  <link rel="alternate" type="application/rss+xml" title="E's Blog" href="http://yourdomain.com/blog/feed.xml" />
+</head>
+
+
+  <body>
+
+    <header class="site-header">
+
+  <div class="wrapper">
+
+    <a class="site-title" href="/blog/">E's Blog</a>
+
+    <nav class="site-nav">
+      <a href="#" class="menu-icon">
+        <svg viewBox="0 0 18 15">
+          <path fill="#424242" d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.031C17.335,0,18,0.665,18,1.484L18,1.484z"/>
+          <path fill="#424242" d="M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0c0-0.82,0.665-1.484,1.484-1.484 h15.031C17.335,6.031,18,6.696,18,7.516L18,7.516z"/>
+          <path fill="#424242" d="M18,13.516C18,14.335,17.335,15,16.516,15H1.484C0.665,15,0,14.335,0,13.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.031C17.335,12.031,18,12.696,18,13.516L18,13.516z"/>
+        </svg>
+      </a>
+
+      <div class="trigger">
+        
+          
+          <a class="page-link" href="/blog/about/">About</a>
+          
+        
+          
+        
+          
+        
+          
+        
+      </div>
+    </nav>
+
+  </div>
+
+</header>
+
+
+    <div class="page-content">
+      <div class="wrapper">
+        <div class="post">
+
+  <header class="post-header">
+    <h1 class="post-title">Making Network Requests with Alamofire</h1>
+    <p class="post-meta">Aug 30, 2015</p>
+  </header>
+
+  <article class="post-content">
+    <p>Almost every iOS app needs to interact with a remote API in some form or another. In this post I want to detail how I set up my networking layer using Alamofire in Swift. Enhancing this approach to work with Core Data will come in a future article.</p>
+
+<p>Our approach will be:</p>
+
+<p>1) Use an enum to model the API Endpoints <br />
+2) Use router objects to encapsulate the details of an NSURLRequest for each API endpoint case <br />
+3) Use a manager singleton, which kicks off the request using Alamofire with a Router object and endpoint <br />
+4) Add a completion closure so the initiating view controller can be informed when the request completes <br /></p>
+
+<p>We will use enums to model API endpoints, Router objects to manage details of making requests to the endpoint, a manager object singleton to perform the request, and a callback closure to get the results of the API call back to the view controller that initiated the request.</p>
+
+<p>First, let’s install some 3rd party libraries we’ll be using</p>
+
+<p>Cartfile</p>
+
+<div class="highlight"><pre><code class="language-swift" data-lang="swift"><span class="n">github</span> <span class="s">&quot;Alamofire/Alamofire&quot;</span> <span class="o">==</span> <span class="mf">1.3.0</span>
+<span class="n">github</span> <span class="s">&quot;Thomvis/SwiftyJSON&quot;</span> <span class="o">==</span> <span class="mf">2.2.1</span>
+<span class="n">github</span> <span class="s">&quot;swisspol/GCDWebServer&quot;</span> <span class="o">~&gt;</span> <span class="mf">3.2.5</span></code></pre></div>
+
+<p>run:</p>
+
+<div class="highlight"><pre><code class="language-swift" data-lang="swift"><span class="o">&gt;</span> <span class="n">carthage</span> <span class="n">update</span></code></pre></div>
+
+<p>Link in .framework files into the xcode project following the instructions at the <a href="https://github.com/Carthage/Carthage">Carthage</a> site</p>
+
+<p>Use the following typdef to represent a JSON dictionary:</p>
+
+<div class="highlight"><pre><code class="language-swift" data-lang="swift"><span class="n">public</span> <span class="k">typealias</span> <span class="n">JSONDictionary</span> <span class="o">=</span> <span class="p">[</span><span class="nl">String</span><span class="p">:</span> <span class="n">AnyObject</span><span class="p">]</span></code></pre></div>
+
+<p>We’ll be working with an Article model, which has properties for an id, title, and body, and a function which parses a JSONDictionary into an instance of the Article class</p>
+
+<div class="highlight"><pre><code class="language-swift" data-lang="swift"><span class="k">import</span> <span class="n">Foundation</span>
+
+<span class="k">class</span> <span class="n">Article</span> <span class="p">{</span>
+  <span class="k">var</span> <span class="kt">id</span><span class="o">:</span> <span class="n">Int</span>
+  <span class="k">var</span> <span class="nl">title</span><span class="p">:</span> <span class="n">String</span>
+  <span class="k">var</span> <span class="nl">body</span><span class="p">:</span> <span class="n">String</span>
+
+  <span class="k">init</span><span class="p">(</span><span class="nl">json</span><span class="p">:</span> <span class="n">JSONDictionary</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">populateWithJSON</span><span class="p">(</span><span class="nl">dictionary</span><span class="p">:</span> <span class="n">json</span><span class="p">)</span>
+  <span class="p">}</span>
+
+  <span class="k">func</span> <span class="n">populateWithJSON</span><span class="p">(</span><span class="nl">dictionary</span><span class="p">:</span> <span class="n">JSONDictionary</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="k">let</span> <span class="kt">id</span> <span class="o">=</span> <span class="n">dictionary</span><span class="p">[</span><span class="s">&quot;id&quot;</span><span class="p">]</span> <span class="kt">as</span><span class="o">?</span> <span class="n">Int</span> <span class="p">{</span>
+      <span class="nb">self</span><span class="p">.</span><span class="kt">id</span> <span class="o">=</span> <span class="kt">id</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="k">let</span> <span class="n">title</span> <span class="o">=</span> <span class="n">dictionary</span><span class="p">[</span><span class="s">&quot;title&quot;</span><span class="p">]</span> <span class="kt">as</span><span class="o">?</span> <span class="n">String</span> <span class="p">{</span>
+      <span class="nb">self</span><span class="p">.</span><span class="n">title</span> <span class="o">=</span> <span class="n">title</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="k">let</span> <span class="n">body</span> <span class="o">=</span> <span class="n">dictionary</span><span class="p">[</span><span class="s">&quot;body&quot;</span><span class="p">]</span> <span class="kt">as</span><span class="o">?</span> <span class="n">String</span> <span class="p">{</span>
+      <span class="nb">self</span><span class="p">.</span><span class="n">body</span> <span class="o">=</span> <span class="n">body</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span></code></pre></div>
+
+<p>I use this approach for JSON parsing over something nicer like ObjectMapper, because it allows more flexibility in the way objects are initialized. For example, when we switch to use core data, we don’t have the ability to init() our objects ourselves - core data does that for us, therefore we need a way to populate objects that have already been initialized. Hence, populateWithJson</p>
+
+<p>Next lets add the base router class:</p>
+
+<div class="highlight"><pre><code class="language-swift" data-lang="swift"><span class="k">import</span> <span class="n">Foundation</span>
+<span class="k">import</span> <span class="n">Alamofire</span>
+
+<span class="k">typealias</span> <span class="n">APIParams</span> <span class="o">=</span> <span class="p">[</span><span class="nl">String</span> <span class="p">:</span> <span class="n">AnyObject</span><span class="p">]</span><span class="o">?</span>
+
+<span class="k">protocol</span> <span class="n">APIConfiguration</span> <span class="p">{</span>
+  <span class="k">var</span> <span class="nl">method</span><span class="p">:</span> <span class="n">Alamofire</span><span class="p">.</span><span class="n">Method</span> <span class="p">{</span> <span class="kr">get</span> <span class="p">}</span>
+  <span class="k">var</span> <span class="nl">encoding</span><span class="p">:</span> <span class="n">Alamofire</span><span class="p">.</span><span class="n">ParameterEncoding</span><span class="o">?</span> <span class="p">{</span> <span class="kr">get</span> <span class="p">}</span>
+  <span class="k">var</span> <span class="nl">path</span><span class="p">:</span> <span class="n">String</span> <span class="p">{</span> <span class="kr">get</span> <span class="p">}</span>
+  <span class="k">var</span> <span class="nl">parameters</span><span class="p">:</span> <span class="n">APIParams</span> <span class="p">{</span> <span class="kr">get</span> <span class="p">}</span>
+  <span class="k">var</span> <span class="nl">baseUrl</span><span class="p">:</span> <span class="n">String</span> <span class="p">{</span> <span class="kr">get</span> <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">class</span> <span class="nl">BaseRouter</span> <span class="p">:</span> <span class="n">URLRequestConvertible</span><span class="p">,</span> <span class="n">APIConfiguration</span> <span class="p">{</span>
+
+  <span class="k">init</span><span class="p">()</span> <span class="p">{}</span>
+
+  <span class="k">var</span> <span class="nl">method</span><span class="p">:</span> <span class="n">Alamofire</span><span class="p">.</span><span class="n">Method</span> <span class="p">{</span>
+    <span class="n">fatalError</span><span class="p">(</span><span class="s">&quot;[\(reflect(self).summary) - \(__FUNCTION__))] Must be overridden in subclass&quot;</span><span class="p">)</span>
+  <span class="p">}</span>
+
+  <span class="k">var</span> <span class="nl">encoding</span><span class="p">:</span> <span class="n">Alamofire</span><span class="p">.</span><span class="n">ParameterEncoding</span><span class="o">?</span> <span class="p">{</span>
+    <span class="n">fatalError</span><span class="p">(</span><span class="s">&quot;[\(reflect(self).summary) - \(__FUNCTION__))] Must be overridden in subclass&quot;</span><span class="p">)</span>
+  <span class="p">}</span>
+
+  <span class="k">var</span> <span class="nl">path</span><span class="p">:</span> <span class="n">String</span> <span class="p">{</span>
+    <span class="n">fatalError</span><span class="p">(</span><span class="s">&quot;[\(reflect(self).summary) - \(__FUNCTION__))] Must be overridden in subclass&quot;</span><span class="p">)</span>
+  <span class="p">}</span>
+
+  <span class="k">var</span> <span class="nl">parameters</span><span class="p">:</span> <span class="n">APIParams</span> <span class="p">{</span>
+    <span class="n">fatalError</span><span class="p">(</span><span class="s">&quot;[\(reflect(self).summary) - \(__FUNCTION__))] Must be overridden in subclass&quot;</span><span class="p">)</span>
+  <span class="p">}</span>
+
+  <span class="k">var</span> <span class="nl">baseUrl</span><span class="p">:</span> <span class="n">String</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="n">baseUrl</span> <span class="o">=</span> <span class="bp">NSBundle</span><span class="p">.</span><span class="n">mainBundle</span><span class="p">().</span><span class="n">stringForKey</span><span class="p">(</span><span class="s">&quot;API_BASE_URL&quot;</span><span class="p">)</span><span class="o">!</span>
+    <span class="k">return</span> <span class="n">baseUrl</span>
+  <span class="p">}</span>
+
+  <span class="k">var</span> <span class="nl">URLRequest</span><span class="p">:</span> <span class="bp">NSURLRequest</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="n">baseURL</span> <span class="o">=</span> <span class="bp">NSURL</span><span class="p">(</span><span class="nl">string</span><span class="p">:</span> <span class="n">baseUrl</span><span class="p">);</span>
+    <span class="k">let</span> <span class="n">URLRequest</span> <span class="o">=</span> <span class="bp">NSURLRequest</span><span class="p">(</span><span class="nl">URL</span><span class="p">:</span> <span class="n">baseURL</span><span class="o">!</span><span class="p">.</span><span class="n">URLByAppendingPathComponent</span><span class="p">(</span><span class="n">path</span><span class="p">))</span>
+    <span class="k">let</span> <span class="n">mutableURLRequest</span> <span class="o">=</span> <span class="bp">NSMutableURLRequest</span><span class="p">(</span><span class="nl">URL</span><span class="p">:</span> <span class="n">baseURL</span><span class="o">!</span><span class="p">.</span><span class="n">URLByAppendingPathComponent</span><span class="p">(</span><span class="n">path</span><span class="p">))</span>
+    <span class="n">mutableURLRequest</span><span class="p">.</span><span class="n">HTTPMethod</span> <span class="o">=</span> <span class="n">method</span><span class="p">.</span><span class="n">rawValue</span>
+    <span class="k">if</span> <span class="k">let</span> <span class="n">encoding</span> <span class="o">=</span> <span class="n">encoding</span> <span class="p">{</span>
+      <span class="k">return</span> <span class="n">encoding</span><span class="p">.</span><span class="n">encode</span><span class="p">(</span><span class="n">mutableURLRequest</span><span class="p">,</span> <span class="nl">parameters</span><span class="p">:</span> <span class="n">parameters</span><span class="p">)</span><span class="mf">.0</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">mutableURLRequest</span>
+  <span class="p">}</span>
+
+<span class="p">}</span></code></pre></div>
+
+<p>Alamofire needs an NSURLRequest to be able to make a request, which is what is being constructed in the URLRequest computed property. We add the URLRequestConvertible protocol to this object so that the router object itself can be treated as a NSURLRequest, and passed to any method (such as alamofire’s request method) which expects one.</p>
+
+<p>APIConfiguration is a protocol which allows us to configure each endpoint in the enum with the information we’ll need for each endpoint, such as the encoding method, base url, HTTP method, and path. Lets take a look at an example:</p>
+
+<p>ArticleRouter.swift</p>
+
+<div class="highlight"><pre><code class="language-swift" data-lang="swift"><span class="k">import</span> <span class="n">Foundation</span>
+<span class="k">import</span> <span class="n">Alamofire</span>
+
+<span class="k">enum</span> <span class="n">ArticleEndpoint</span> <span class="p">{</span>
+  <span class="k">case</span> <span class="n">GetArticles</span><span class="p">(</span><span class="nl">page</span><span class="p">:</span> <span class="n">Int</span><span class="p">)</span>
+  <span class="k">case</span> <span class="n">GetArticle</span><span class="p">(</span><span class="kt">id</span><span class="o">:</span> <span class="n">Int</span><span class="p">)</span>
+  <span class="k">case</span> <span class="n">UpdateArticle</span><span class="p">(</span><span class="nl">article</span><span class="p">:</span> <span class="n">Article</span><span class="p">)</span>
+  <span class="k">case</span> <span class="n">DeleteArticle</span><span class="p">(</span><span class="kt">id</span><span class="o">:</span> <span class="n">Int</span><span class="p">)</span>
+<span class="p">}</span>
+
+<span class="k">class</span> <span class="nl">ArticleRouter</span> <span class="p">:</span> <span class="n">BaseRouter</span> <span class="p">{</span>
+
+  <span class="k">var</span> <span class="nl">endpoint</span><span class="p">:</span> <span class="n">ArticleEndpoint</span>
+  <span class="k">init</span><span class="p">(</span><span class="nl">endpoint</span><span class="p">:</span> <span class="n">ArticleEndpoint</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nb">self</span><span class="p">.</span><span class="n">endpoint</span> <span class="o">=</span> <span class="n">endpoint</span>
+  <span class="p">}</span>
+
+  <span class="kr">override</span> <span class="k">var</span> <span class="nl">method</span><span class="p">:</span> <span class="n">Alamofire</span><span class="p">.</span><span class="n">Method</span> <span class="p">{</span>
+    <span class="k">switch</span> <span class="n">endpoint</span> <span class="p">{</span>
+    <span class="k">case</span> <span class="p">.</span><span class="nl">GetArticles</span><span class="p">:</span> <span class="k">return</span> <span class="p">.</span><span class="n">GET</span>
+    <span class="k">case</span> <span class="p">.</span><span class="nl">GetArticle</span><span class="p">:</span> <span class="k">return</span> <span class="p">.</span><span class="n">GET</span>
+    <span class="k">case</span> <span class="p">.</span><span class="nl">UpdateArticle</span><span class="p">:</span> <span class="k">return</span> <span class="p">.</span><span class="n">PUT</span>
+    <span class="k">case</span> <span class="p">.</span><span class="nl">DeleteArticle</span><span class="p">:</span> <span class="k">return</span> <span class="p">.</span><span class="n">DELETE</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="kr">override</span> <span class="k">var</span> <span class="nl">path</span><span class="p">:</span> <span class="n">String</span> <span class="p">{</span>
+    <span class="k">switch</span> <span class="n">endpoint</span> <span class="p">{</span>
+    <span class="k">case</span> <span class="p">.</span><span class="nl">GetArticles</span><span class="p">:</span> <span class="k">return</span> <span class="s">&quot;articles.json&quot;</span>
+    <span class="k">case</span> <span class="p">.</span><span class="n">GetArticle</span><span class="p">(</span><span class="k">let</span> <span class="kt">id</span><span class="p">)</span><span class="o">:</span> <span class="k">return</span> <span class="s">&quot;/\(id)/article.json&quot;</span>
+    <span class="k">case</span> <span class="p">.</span><span class="n">UpdateArticle</span><span class="p">(</span><span class="k">let</span> <span class="n">article</span><span class="p">)</span><span class="o">:</span> <span class="k">return</span> <span class="s">&quot;/\(article.id)/article.json&quot;</span>
+    <span class="k">case</span> <span class="p">.</span><span class="n">DeleteArticle</span><span class="p">(</span><span class="k">let</span> <span class="kt">id</span><span class="p">)</span><span class="o">:</span> <span class="k">return</span> <span class="s">&quot;/\(id)/article.json&quot;</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="kr">override</span> <span class="k">var</span> <span class="nl">parameters</span><span class="p">:</span> <span class="n">APIParams</span> <span class="p">{</span>
+    <span class="k">switch</span> <span class="n">endpoint</span> <span class="p">{</span>
+    <span class="k">case</span> <span class="p">.</span><span class="n">GetArticles</span><span class="p">(</span><span class="k">let</span> <span class="n">page</span><span class="p">)</span><span class="o">:</span>
+      <span class="k">return</span> <span class="p">[</span><span class="s">&quot;page&quot;</span> <span class="o">:</span> <span class="n">page</span><span class="p">]</span>
+
+    <span class="k">case</span> <span class="p">.</span><span class="n">UpdateArticle</span><span class="p">(</span><span class="k">let</span> <span class="n">article</span><span class="p">)</span><span class="o">:</span>
+      <span class="k">return</span> <span class="n">article</span><span class="p">.</span><span class="n">toJsonDictionary</span><span class="p">()</span>
+
+    <span class="k">default</span><span class="o">:</span> <span class="k">return</span> <span class="nb">nil</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+  <span class="kr">override</span> <span class="k">var</span> <span class="nl">encoding</span><span class="p">:</span> <span class="n">Alamofire</span><span class="p">.</span><span class="n">ParameterEncoding</span><span class="o">?</span> <span class="p">{</span>
+    <span class="k">switch</span> <span class="n">endpoint</span> <span class="p">{</span>
+    <span class="k">case</span> <span class="p">.</span><span class="nl">GetArticles</span><span class="p">:</span> <span class="k">return</span> <span class="p">.</span><span class="n">URL</span>
+    <span class="k">case</span> <span class="p">.</span><span class="nl">GetArticle</span><span class="p">:</span> <span class="k">return</span> <span class="p">.</span><span class="n">URL</span>
+    <span class="k">default</span><span class="o">:</span> <span class="k">return</span> <span class="p">.</span><span class="n">JSON</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+<span class="p">}</span></code></pre></div>
+
+<p>Notice the ArticleEndpoint enum: this enum represents the set of actions we can do with articles on our server. In this case, we can get a list of articles, get the details for a single article, update an article, and delete an article.</p>
+
+<p>For each of the methods in the BaseRouter, we override them in the ArticleRouter and switch on the ArticleEndpoint to configure the information for that endpoint. The method, path, parameters, and encoding fully specify the request, and is enough information for Alamofire to make the request to the server.</p>
+
+<p>Next, we can create a manager object which will make the requests for us.</p>
+
+<div class="highlight"><pre><code class="language-swift" data-lang="swift"><span class="k">import</span> <span class="n">Foundation</span>
+<span class="k">import</span> <span class="n">Alamofire</span>
+
+<span class="n">public</span> <span class="k">class</span> <span class="n">APIManager</span> <span class="p">{</span>
+
+  <span class="n">public</span> <span class="k">class</span> <span class="k">var</span> <span class="nl">sharedInstance</span><span class="p">:</span> <span class="n">APIManager</span> <span class="p">{</span>
+    <span class="k">struct</span> <span class="n">Singleton</span> <span class="p">{</span>
+      <span class="k">static</span> <span class="k">let</span> <span class="nl">instance</span> <span class="p">:</span> <span class="n">APIManager</span> <span class="o">=</span> <span class="n">APIManager</span><span class="p">()</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">Singleton</span><span class="p">.</span><span class="n">instance</span>
+  <span class="p">}</span>
+
+  <span class="k">let</span> <span class="n">manager</span> <span class="o">=</span> <span class="n">Manager</span><span class="p">()</span>
+
+  <span class="k">init</span><span class="p">()</span> <span class="p">{</span>
+  <span class="p">}</span>
+
+  <span class="c1">//MARK: methods</span>
+
+  <span class="k">func</span> <span class="n">getArticles</span><span class="p">(</span><span class="nl">page</span><span class="p">:</span> <span class="n">Int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="nl">completion</span><span class="p">:</span> <span class="p">(</span><span class="nl">articles</span><span class="p">:</span> <span class="p">[</span><span class="n">Article</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="p">())</span> <span class="o">-&gt;</span> <span class="n">Request</span> <span class="p">{</span>
+    <span class="k">let</span> <span class="n">router</span> <span class="o">=</span> <span class="n">ArticleRouter</span><span class="p">(</span><span class="nl">endpoint</span><span class="p">:</span> <span class="p">.</span><span class="n">GetArticles</span><span class="p">(</span><span class="nl">page</span><span class="p">:</span> <span class="n">page</span><span class="p">))</span>
+
+    <span class="k">return</span> <span class="n">manager</span><span class="p">.</span><span class="n">request</span><span class="p">(</span><span class="n">router</span><span class="p">)</span>
+      <span class="p">.</span><span class="n">validate</span><span class="p">()</span>
+      <span class="p">.</span><span class="n">responseJSON</span> <span class="p">{</span> <span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">response</span><span class="p">,</span> <span class="n">object</span><span class="p">,</span> <span class="n">error</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Void</span> <span class="k">in</span>
+        <span class="k">if</span> <span class="k">let</span> <span class="n">error</span> <span class="o">=</span> <span class="n">error</span> <span class="p">{</span>
+          <span class="n">println</span><span class="p">(</span><span class="n">error</span><span class="p">)</span>
+          <span class="k">return</span><span class="p">;</span>
+        <span class="p">}</span>
+
+        <span class="k">let</span> <span class="n">articleJson</span> <span class="o">=</span> <span class="p">((</span><span class="n">object</span> <span class="kt">as</span><span class="o">!</span> <span class="n">JSONDictionary</span><span class="p">)[</span><span class="s">&quot;articles&quot;</span><span class="p">]</span> <span class="kt">as</span><span class="o">?</span> <span class="p">[</span><span class="n">JSONDictionary</span><span class="p">])</span><span class="o">!</span>
+
+        <span class="k">var</span> <span class="nl">objs</span><span class="p">:</span> <span class="p">[</span><span class="n">Article</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="k">for</span> <span class="n">json</span> <span class="k">in</span> <span class="n">articleJson</span> <span class="p">{</span>
+          <span class="n">objs</span> <span class="o">+=</span> <span class="p">[</span><span class="n">Article</span><span class="p">(</span><span class="nl">json</span><span class="p">:</span> <span class="n">json</span><span class="p">)]</span>
+        <span class="p">}</span>
+
+        <span class="n">completion</span><span class="p">(</span><span class="nl">articles</span><span class="p">:</span> <span class="n">objs</span><span class="p">)</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+<span class="p">}</span></code></pre></div>
+
+<p>This manager uses the singleton pattern to hold onto a reference of the Alamofire <code>Manager</code> class to make network requests. We make a request in the function <code>getArticles()</code>, which constructs a router object using the parameters provided, and uses the router object as an NSURLRequest to make a network request with Alamofire. The results are returned in the <code>responseJSON</code> block, and <code>Article</code> objects are created from the JSON response, and passed back to the completion handler.</p>
+
+<p>Next we need a view controller to initiate the request and handle the response. Our example view controller will look like this:</p>
+
+<div class="highlight"><pre><code class="language-swift" data-lang="swift"><span class="k">import</span> <span class="n">UIKit</span>
+<span class="k">import</span> <span class="n">Alamofire</span>
+
+<span class="k">class</span> <span class="nl">ViewController</span><span class="p">:</span> <span class="bp">UIViewController</span> <span class="p">{</span>
+
+  <span class="k">var</span> <span class="nl">request</span><span class="p">:</span> <span class="n">Request</span><span class="o">?</span>
+
+  <span class="n">required</span> <span class="k">init</span><span class="p">(</span><span class="n">coder</span> <span class="nl">aDecoder</span><span class="p">:</span> <span class="bp">NSCoder</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nb">super</span><span class="p">.</span><span class="k">init</span><span class="p">(</span><span class="nl">coder</span><span class="p">:</span> <span class="n">aDecoder</span><span class="p">)</span>
+  <span class="p">}</span>
+
+  <span class="kr">override</span> <span class="k">func</span> <span class="n">viewDidLoad</span><span class="p">()</span> <span class="p">{</span>
+    <span class="nb">super</span><span class="p">.</span><span class="n">viewDidLoad</span><span class="p">()</span>
+    <span class="n">loadData</span><span class="p">()</span>
+  <span class="p">}</span>
+
+  <span class="k">deinit</span> <span class="p">{</span>
+    <span class="n">request</span><span class="o">?</span><span class="p">.</span><span class="n">cancel</span><span class="p">()</span>
+  <span class="p">}</span>
+
+  <span class="k">func</span> <span class="n">loadData</span><span class="p">()</span> <span class="p">{</span>
+    <span class="n">request</span> <span class="o">=</span> <span class="n">APIManager</span><span class="p">.</span><span class="n">sharedInstance</span><span class="p">.</span><span class="n">getArticles</span> <span class="p">{</span> <span class="p">[</span><span class="kr">unowned</span> <span class="nb">self</span><span class="p">]</span> <span class="n">articles</span> <span class="k">in</span>
+      <span class="nb">self</span><span class="p">.</span><span class="n">request</span> <span class="o">=</span> <span class="nb">nil</span>
+      <span class="n">println</span><span class="p">(</span><span class="s">&quot;received articles: \(articles)&quot;</span><span class="p">)</span>
+    <span class="p">}</span>
+  <span class="p">}</span>
+
+<span class="p">}</span></code></pre></div>
+
+<p>This view controller will initiate a network request when the view controller loads, and then print out the resulting list of objects to the console once the network requests completes.</p>
+
+<p>Now we have the ability to make a request to a web server and receive a list of objects back, as a list of <code>Article</code> objects that can be used in our app. The only difficulty with the current appraoch is that we have to keep a local copy of <code>Article</code> objects inside of the view controller, in order to present them in the UI of our app. This means that we need to cate care of all the data binding and syncing manually, which can be a pain. For example, if the user edits an object in a detail page, those changes will need to be sent back to the list in order to keep the list of data and detail view controller for that object in sync. We can prevent the need to have a local copy of the <code>Article</code> list in the view controller by first putting the <code>Articles</code> into Core Data, and using an <code>NSFetchedResultsController</code> to bind the data in core data to the UI. Stay tuned for the next article.</p>
+
+<p>You can find a working example of the code on <a href="https://github.com/eliasbagley/alamofire-example-1">Github</a></p>
+
+
+  </article>
+
+  
+
+
+</div>
+
+      </div>
+    </div>
+
+    <footer class="site-footer">
+
+  <div class="wrapper">
+
+    <h2 class="footer-heading">E's Blog</h2>
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col  footer-col-1">
+        <ul class="contact-list">
+          <li>E's Blog</li>
+          <li><a href="mailto:elias.bagley@gmail.com">elias.bagley@gmail.com</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col  footer-col-2">
+        <ul class="social-media-list">
+          
+          <li>
+            <a href="https://github.com/eliasbagley">
+              <span class="icon  icon--github">
+                <svg viewBox="0 0 16 16">
+                  <path fill="#828282" d="M7.999,0.431c-4.285,0-7.76,3.474-7.76,7.761 c0,3.428,2.223,6.337,5.307,7.363c0.388,0.071,0.53-0.168,0.53-0.374c0-0.184-0.007-0.672-0.01-1.32 c-2.159,0.469-2.614-1.04-2.614-1.04c-0.353-0.896-0.862-1.135-0.862-1.135c-0.705-0.481,0.053-0.472,0.053-0.472 c0.779,0.055,1.189,0.8,1.189,0.8c0.692,1.186,1.816,0.843,2.258,0.645c0.071-0.502,0.271-0.843,0.493-1.037 C4.86,11.425,3.049,10.76,3.049,7.786c0-0.847,0.302-1.54,0.799-2.082C3.768,5.507,3.501,4.718,3.924,3.65 c0,0,0.652-0.209,2.134,0.796C6.677,4.273,7.34,4.187,8,4.184c0.659,0.003,1.323,0.089,1.943,0.261 c1.482-1.004,2.132-0.796,2.132-0.796c0.423,1.068,0.157,1.857,0.077,2.054c0.497,0.542,0.798,1.235,0.798,2.082 c0,2.981-1.814,3.637-3.543,3.829c0.279,0.24,0.527,0.713,0.527,1.437c0,1.037-0.01,1.874-0.01,2.129 c0,0.208,0.14,0.449,0.534,0.373c3.081-1.028,5.302-3.935,5.302-7.362C15.76,3.906,12.285,0.431,7.999,0.431z"/>
+                </svg>
+              </span>
+
+              <span class="username">eliasbagley</span>
+            </a>
+          </li>
+          
+
+          
+          <li>
+            <a href="https://twitter.com/eliasbagley">
+              <span class="icon  icon--twitter">
+                <svg viewBox="0 0 16 16">
+                  <path fill="#828282" d="M15.969,3.058c-0.586,0.26-1.217,0.436-1.878,0.515c0.675-0.405,1.194-1.045,1.438-1.809
+                  c-0.632,0.375-1.332,0.647-2.076,0.793c-0.596-0.636-1.446-1.033-2.387-1.033c-1.806,0-3.27,1.464-3.27,3.27 c0,0.256,0.029,0.506,0.085,0.745C5.163,5.404,2.753,4.102,1.14,2.124C0.859,2.607,0.698,3.168,0.698,3.767 c0,1.134,0.577,2.135,1.455,2.722C1.616,6.472,1.112,6.325,0.671,6.08c0,0.014,0,0.027,0,0.041c0,1.584,1.127,2.906,2.623,3.206 C3.02,9.402,2.731,9.442,2.433,9.442c-0.211,0-0.416-0.021-0.615-0.059c0.416,1.299,1.624,2.245,3.055,2.271 c-1.119,0.877-2.529,1.4-4.061,1.4c-0.264,0-0.524-0.015-0.78-0.046c1.447,0.928,3.166,1.469,5.013,1.469 c6.015,0,9.304-4.983,9.304-9.304c0-0.142-0.003-0.283-0.009-0.423C14.976,4.29,15.531,3.714,15.969,3.058z"/>
+                </svg>
+              </span>
+
+              <span class="username">eliasbagley</span>
+            </a>
+          </li>
+          
+        </ul>
+      </div>
+
+      <div class="footer-col  footer-col-3">
+        <p class="text">A blog for all things that interest me
+</p>
+      </div>
+    </div>
+
+  </div>
+
+</footer>
+
+
+  </body>
+
+</html>
